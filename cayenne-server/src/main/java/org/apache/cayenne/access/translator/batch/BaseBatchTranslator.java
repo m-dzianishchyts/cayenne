@@ -19,8 +19,6 @@
 
 package org.apache.cayenne.access.translator.batch;
 
-import java.util.List;
-
 import org.apache.cayenne.access.sqlbuilder.ExpressionNodeBuilder;
 import org.apache.cayenne.access.sqlbuilder.NodeBuilder;
 import org.apache.cayenne.access.sqlbuilder.SQLBuilder;
@@ -32,9 +30,11 @@ import org.apache.cayenne.dba.DbAdapter;
 import org.apache.cayenne.map.DbAttribute;
 import org.apache.cayenne.query.BatchQuery;
 
+import java.util.List;
+
 /**
- * @since 4.2
  * @param <T> type of the batch query to translate
+ * @since 4.2
  */
 public abstract class BaseBatchTranslator<T extends BatchQuery> {
 
@@ -42,7 +42,7 @@ public abstract class BaseBatchTranslator<T extends BatchQuery> {
 
     protected DbAttributeBinding[] bindings;
 
-    public BaseBatchTranslator(T query, DbAdapter adapter) {
+    protected BaseBatchTranslator(T query, DbAdapter adapter) {
         this.context = new BatchTranslatorContext<>(query, adapter);
     }
 
@@ -69,7 +69,7 @@ public abstract class BaseBatchTranslator<T extends BatchQuery> {
         return visitor.getSQLString();
     }
 
-    abstract protected boolean isNullAttribute(DbAttribute attribute);
+    protected abstract boolean isNullAttribute(DbAttribute attribute);
 
     protected ExpressionNodeBuilder buildQualifier(List<DbAttribute> attributeList) {
         ExpressionNodeBuilder eq = null;
@@ -78,7 +78,7 @@ public abstract class BaseBatchTranslator<T extends BatchQuery> {
             ExpressionNodeBuilder next = SQLBuilder
                     .column(attr.getName()).attribute(attr)
                     .eq(SQLBuilder.value(value).attribute(attr));
-            if(eq == null) {
+            if (eq == null) {
                 eq = next;
             } else {
                 eq = eq.and(next);

@@ -44,7 +44,6 @@ import org.apache.cayenne.access.types.ValueObjectTypeRegistry;
 import org.apache.cayenne.configuration.Constants;
 import org.apache.cayenne.configuration.RuntimeProperties;
 import org.apache.cayenne.dba.JdbcAdapter;
-import org.apache.cayenne.dba.PkGenerator;
 import org.apache.cayenne.di.Inject;
 import org.apache.cayenne.map.DbAttribute;
 import org.apache.cayenne.map.DbEntity;
@@ -80,7 +79,7 @@ public class OracleAdapter extends JdbcAdapter {
 	protected static boolean initDone;
 	protected static int oracleCursorType = Integer.MAX_VALUE;
 
-	protected static boolean supportsOracleLOB;
+	protected static boolean isOracleLOBSupported;
 
 	private List<String> SYSTEM_SCHEMAS = Arrays.asList(
 			"ANONYMOUS", "APPQOSSYS", "AUDSYS", "CTXSYS", "DBSFWUSER",
@@ -104,19 +103,18 @@ public class OracleAdapter extends JdbcAdapter {
 
 		// configure static information
 		try {
-			Class<?> oraTypes = Class.forName("oracle.jdbc.driver.OracleTypes");
-			Field cursorField = oraTypes.getField("CURSOR");
+			Class<?> oracleTypes = Class.forName("oracle.jdbc.driver.OracleTypes");
+			Field cursorField = oracleTypes.getField("CURSOR");
 			oracleCursorType = cursorField.getInt(null);
 
-			supportsOracleLOB = true;
+			isOracleLOBSupported = true;
 		} catch (Throwable th) {
 			// ignoring...
 		}
 	}
 
-	// TODO: rename to something that looks like English ...
-	public static boolean isSupportsOracleLOB() {
-		return supportsOracleLOB;
+	public static boolean isOracleLOBSupported() {
+		return isOracleLOBSupported;
 	}
 
 	/**

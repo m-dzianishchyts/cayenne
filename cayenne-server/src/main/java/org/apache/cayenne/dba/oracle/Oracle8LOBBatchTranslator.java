@@ -19,73 +19,52 @@
 
 package org.apache.cayenne.dba.oracle;
 
-import java.sql.Types;
-import java.util.Iterator;
-import java.util.List;
-
 import org.apache.cayenne.CayenneRuntimeException;
+import org.apache.cayenne.access.sqlbuilder.ColumnNodeBuilder;
+import org.apache.cayenne.access.sqlbuilder.SQLBuilder;
+import org.apache.cayenne.access.sqlbuilder.SelectBuilder;
+import org.apache.cayenne.access.sqlbuilder.TableNodeBuilder;
 import org.apache.cayenne.access.translator.DbAttributeBinding;
-import org.apache.cayenne.access.translator.batch.legacy.DefaultBatchTranslator;
+import org.apache.cayenne.access.translator.batch.BaseBatchTranslator;
+import org.apache.cayenne.access.translator.batch.BatchTranslator;
 import org.apache.cayenne.access.types.ExtendedType;
 import org.apache.cayenne.dba.DbAdapter;
-import org.apache.cayenne.dba.QuotingStrategy;
 import org.apache.cayenne.dba.TypesMapping;
 import org.apache.cayenne.map.DbAttribute;
 import org.apache.cayenne.query.BatchQuery;
 import org.apache.cayenne.query.BatchQueryRow;
 
+import java.sql.Types;
+import java.util.List;
+
 /**
  * Superclass of query builders for the DML operations involving LOBs.
- * TODO: update to the new batch translation logic
  */
-abstract class Oracle8LOBBatchTranslator extends DefaultBatchTranslator {
+abstract class Oracle8LOBBatchTranslator<T extends BatchQuery> extends BaseBatchTranslator<T> implements
+        BatchTranslator {
 
     protected String newClobFunction;
     protected String newBlobFunction;
 
-    Oracle8LOBBatchTranslator(BatchQuery query, DbAdapter adapter, String trimFunction) {
-        super(query, adapter, trimFunction);
-    }
-
-    abstract List<Object> getValuesForLOBUpdateParameters(BatchQueryRow row);
-
-    abstract String createSql(BatchQueryRow row);
-
-    @Override
-    protected String createSql() {
-        throw new UnsupportedOperationException();
+    Oracle8LOBBatchTranslator(T query, DbAdapter adapter) {
+        super(query, adapter);
     }
 
     String createLOBSelectString(List<DbAttribute> selectedLOBAttributes, List<DbAttribute> qualifierAttributes) {
+        TableNodeBuilder table = SQLBuilder.table(context.getRootDbEntity());
+        ColumnNodeBuilder[] selectedLOBAttributesArray = new ColumnNodeBuilder[selectedLOBAttributes.size()];
 
-        QuotingStrategy strategy = adapter.getQuotingStrategy();
-
-        StringBuilder buf = new StringBuilder();
-        buf.append("SELECT ");
-
-        Iterator<DbAttribute> it = selectedLOBAttributes.iterator();
-        while (it.hasNext()) {
-            buf.append(strategy.quotedName(it.next()));
-
-            if (it.hasNext()) {
-                buf.append(", ");
-            }
+        for (int i = 0; i < selectedLOBAttributesArray.length; i++) {
+            DbAttribute attribute = selectedLOBAttributes.get(i);
+            selectedLOBAttributesArray[i] = table.column(attribute);
         }
 
-        buf.append(" FROM ").append(strategy.quotedFullyQualifiedName(query.getDbEntity())).append(" WHERE ");
-
-        it = qualifierAttributes.iterator();
-        while (it.hasNext()) {
-            DbAttribute attribute = it.next();
-            appendDbAttribute(buf, attribute);
-            buf.append(" = ?");
-            if (it.hasNext()) {
-                buf.append(" AND ");
-            }
-        }
-
-        buf.append(" FOR UPDATE");
-        return buf.toString();
+        // TODO: select for update
+        SelectBuilder select = SQLBuilder
+                .select(selectedLOBAttributesArray)
+                .from(table)
+                .where(buildQualifier(qualifierAttributes));
+        return doTranslate(select);
     }
 
     /**
@@ -96,7 +75,7 @@ abstract class Oracle8LOBBatchTranslator extends DefaultBatchTranslator {
 
         int type = dbAttribute.getType();
 
-        if (isUpdateableColumn(value, type)) {
+        if (isUpdatableColumn(value, type)) {
             buf.append('?');
         } else {
             if (type == Types.CLOB) {
@@ -105,55 +84,38 @@ abstract class Oracle8LOBBatchTranslator extends DefaultBatchTranslator {
                 buf.append(newBlobFunction);
             } else {
                 throw new CayenneRuntimeException("Unknown LOB column type: %s(%s). Query buffer: %s."
-                         , type, TypesMapping.getSqlNameByType(type), buf);
+                        , type, TypesMapping.getSqlNameByType(type), buf);
             }
         }
     }
-    
+
     @Override
-    protected DbAttributeBinding[] createBindings() {
-        List<DbAttribute> dbAttributes = query.getDbAttributes();
-        int len = dbAttributes.size();
-
-        DbAttributeBinding[] bindings = new DbAttributeBinding[len];
-
-        for (int i = 0; i < len; i++) {
-            bindings[i] = new DbAttributeBinding(dbAttributes.get(i));
-        }
-
-        return bindings;
-    }
-    
-    @Override
-    protected DbAttributeBinding[] doUpdateBindings(BatchQueryRow row) {
+    public DbAttributeBinding[] updateBindings(BatchQueryRow row) {
 
         int len = bindings.length;
 
         for (int i = 0, j = 1; i < len; i++) {
-
-            DbAttributeBinding b = bindings[i];
-
+            DbAttributeBinding binding = bindings[i];
             Object value = row.getValue(i);
-            DbAttribute attribute = b.getAttribute();
+            DbAttribute attribute = binding.getAttribute();
             int type = attribute.getType();
 
-            // TODO: (Andrus) This works as long as there is no LOBs in
-            // qualifier
-            if (isUpdateableColumn(value, type)) {
+            // TODO: (Andrus) This works as long as there is no LOBs in qualifier
+            if (isUpdatableColumn(value, type)) {
+                DbAdapter adapter = context.getAdapter();
                 ExtendedType extendedType = value != null
-                        ? adapter.getExtendedTypes().getRegisteredType(value.getClass())
-                        : adapter.getExtendedTypes().getDefaultType();
-
-                b.include(j++, value, extendedType);
+                                            ? adapter.getExtendedTypes().getRegisteredType(value.getClass())
+                                            : adapter.getExtendedTypes().getDefaultType();
+                binding.include(j++, value, extendedType);
             } else {
-                b.exclude();
+                binding.exclude();
             }
         }
 
         return bindings;
     }
 
-    protected boolean isUpdateableColumn(Object value, int type) {
+    protected boolean isUpdatableColumn(Object value, int type) {
         return value == null || type != Types.BLOB && type != Types.CLOB;
     }
 

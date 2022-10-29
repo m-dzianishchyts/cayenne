@@ -19,65 +19,34 @@
 
 package org.apache.cayenne.dba.oracle;
 
+import org.apache.cayenne.access.sqlbuilder.InsertBuilder;
+import org.apache.cayenne.access.sqlbuilder.SQLBuilder;
 import org.apache.cayenne.dba.DbAdapter;
-import org.apache.cayenne.dba.QuotingStrategy;
 import org.apache.cayenne.map.DbAttribute;
-import org.apache.cayenne.query.BatchQueryRow;
 import org.apache.cayenne.query.InsertBatchQuery;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+class Oracle8LOBInsertBatchTranslator extends Oracle8LOBBatchTranslator<InsertBatchQuery> {
 
-class Oracle8LOBInsertBatchTranslator extends Oracle8LOBBatchTranslator {
-
-    Oracle8LOBInsertBatchTranslator(InsertBatchQuery query, DbAdapter adapter, String trimFunction) {
-        super(query, adapter, trimFunction);
+    Oracle8LOBInsertBatchTranslator(InsertBatchQuery query, DbAdapter adapter) {
+        super(query, adapter);
     }
 
     @Override
-    List<Object> getValuesForLOBUpdateParameters(BatchQueryRow row) {
-        List<DbAttribute> dbAttributes = query.getDbAttributes();
-        int len = dbAttributes.size();
+    public String getSql() {
+        InsertBatchQuery query = context.getQuery();
+        InsertBuilder insertBuilder = SQLBuilder.insert(context.getRootDbEntity());
 
-        List<Object> values = new ArrayList<>(len);
-        for (int i = 0; i < len; i++) {
-            Object value = row.getValue(i);
-            DbAttribute attribute = dbAttributes.get(i);
-            if (isUpdateableColumn(value, attribute.getType())) {
-                values.add(value);
-            }
+        for (DbAttribute attribute : query.getDbAttributes()) {
+            insertBuilder
+                    .column(SQLBuilder.column(attribute.getName()).attribute(attribute))
+                    .value(SQLBuilder.value(1).attribute(attribute));
         }
 
-        return values;
+        return doTranslate(insertBuilder);
     }
 
     @Override
-    public String createSql(BatchQueryRow row) {
-        List<DbAttribute> dbAttributes = query.getDbAttributes();
-
-        QuotingStrategy strategy = adapter.getQuotingStrategy();
-
-        StringBuilder buffer = new StringBuilder("INSERT INTO ");
-        buffer.append(strategy.quotedFullyQualifiedName(query.getDbEntity()));
-        buffer.append(" (");
-
-        for (Iterator<DbAttribute> i = dbAttributes.iterator(); i.hasNext();) {
-            DbAttribute attribute = i.next();
-            buffer.append(strategy.quotedName(attribute));
-            if (i.hasNext()) {
-                buffer.append(", ");
-            }
-        }
-        buffer.append(") VALUES (");
-        for (int i = 0; i < dbAttributes.size(); i++) {
-            if (i > 0) {
-                buffer.append(", ");
-            }
-
-            appendUpdatedParameter(buffer, dbAttributes.get(i), row.getValue(i));
-        }
-        buffer.append(')');
-        return buffer.toString();
+    protected boolean isNullAttribute(DbAttribute attribute) {
+        return false;
     }
 }

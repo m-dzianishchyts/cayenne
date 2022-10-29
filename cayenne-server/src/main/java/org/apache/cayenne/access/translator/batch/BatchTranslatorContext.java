@@ -34,7 +34,7 @@ import org.apache.cayenne.query.BatchQuery;
  * @since 4.2
  * @param <T> type of the {@link BatchQuery}
  */
-class BatchTranslatorContext<T extends BatchQuery> implements SQLGenerationContext {
+public class BatchTranslatorContext<T extends BatchQuery> implements SQLGenerationContext {
 
     private final T query;
     private final DbAdapter adapter;
