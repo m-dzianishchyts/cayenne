@@ -49,7 +49,7 @@ public class OracleContainerProvider extends TestContainerProvider {
 
     @Override
     String getDockerImage() {
-        return "oracleinanutshell/oracle-xe-11g";
+        return "gvenzl/oracle-xe";
     }
 
     @Override
