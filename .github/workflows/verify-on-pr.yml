@@ -24,7 +24,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     name: JDK ${{ matrix.jdk }}, DB ${{ matrix.db-profile }}
-    if: github.repository == 'apache/cayenne'
+    if: github.repository == 'm-dzianishchyts/cayenne'
 
     strategy:
       matrix:

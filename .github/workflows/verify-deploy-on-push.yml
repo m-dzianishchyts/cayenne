@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     name: JDK ${{ matrix.jdk }}, DB ${{ matrix.db-profile }}
     continue-on-error: ${{ matrix.jdk == '19' }}
-    if: github.repository == 'apache/cayenne'
+    if: github.repository == 'm-dzianishchyts/cayenne'
 
     strategy:
       matrix:
@@ -52,30 +52,3 @@ jobs:
 
       - name: mvn verify ${{ matrix.db-profile }}
         run: mvn verify -q -DcayenneTestConnection=${{ matrix.db-profile }} -DcayenneLogLevel=ERROR
-
-  deploy:
-    needs: verify
-    runs-on: ubuntu-latest
-    if: github.repository == 'apache/cayenne' && (contains(github.ref_name, 'STABLE-') || github.ref == 'refs/heads/master')
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Export version
-        uses: ./.github/actions/export-pom-version
-
-      - name: Setup java
-        uses: actions/setup-java@v3
-        if: contains(env.POM_VERSION, '-SNAPSHOT')
-        with:
-          distribution: 'temurin'
-          java-version: 11
-          cache: 'maven'
-
-      - name: Deploy snapshot
-        run: mvn deploy -DskipTests --settings .github/maven-settings.xml
-        if: contains(env.POM_VERSION, '-SNAPSHOT')
-        env:
-          MAVEN_USERNAME: ${{ secrets.NEXUS_USER }}
-          MAVEN_PASSWORD: ${{ secrets.NEXUS_PW }}
