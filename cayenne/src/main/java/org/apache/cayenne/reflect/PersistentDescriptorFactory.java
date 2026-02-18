@@ -18,6 +18,7 @@
  ****************************************************************/
 package org.apache.cayenne.reflect;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -37,6 +38,10 @@ import org.apache.cayenne.map.EntityInheritanceTree;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
 import org.apache.cayenne.map.ObjRelationship;
+import org.apache.cayenne.map.FlattenedPathAnalyzer;
+import org.apache.cayenne.map.FlattenedPathInfo;
+import org.apache.cayenne.map.FlattenedPathInfo.AnnotatedSegment;
+import org.apache.cayenne.map.FlattenedPathSegmentType;
 import org.apache.cayenne.util.CayenneMapEntry;
 
 /**
@@ -306,6 +311,7 @@ public abstract class PersistentDescriptorFactory implements ClassDescriptorFact
 
                 Iterator<CayenneMapEntry> it = property.getAttribute().getDbPathIterator();
                 CayennePath path = CayennePath.EMPTY_PATH;
+                List<AnnotatedSegment> segments = new ArrayList<>();
                 while(it.hasNext()) {
                     CayenneMapEntry next = it.next();
                     if(next instanceof DbRelationship) {
@@ -321,8 +327,11 @@ public abstract class PersistentDescriptorFactory implements ClassDescriptorFact
                                                      .filter(r -> r.getDbRelationships().equals(List.of(rel)))
                                                      .anyMatch(r -> r.getDeleteRule() != DeleteRule.CASCADE);
 
+                        FlattenedPathSegmentType segType = FlattenedPathAnalyzer.classifySegment(rel);
+                        segments.add(new AnnotatedSegment(rel, segType));
                         path = path.dot(rel.getName());
-                        descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), blockCascadeDelete);
+                        FlattenedPathInfo pathInfo = new FlattenedPathInfo(new ArrayList<>(segments));
+                        descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), blockCascadeDelete, pathInfo);
                     }
                 }
                 return true;
@@ -336,11 +345,15 @@ public abstract class PersistentDescriptorFactory implements ClassDescriptorFact
 
                 List<DbRelationship> dbRelationships = property.getRelationship().getDbRelationships();
                 CayennePath path = CayennePath.EMPTY_PATH;
+                List<AnnotatedSegment> segments = new ArrayList<>();
                 int count = dbRelationships.size();
                 for(int i=0; i<count-1; i++) {
                     DbRelationship rel = dbRelationships.get(i);
+                    FlattenedPathSegmentType segType = FlattenedPathAnalyzer.classifySegment(rel);
+                    segments.add(new AnnotatedSegment(rel, segType));
                     path = path.dot(rel.getName());
-                    descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), false);
+                    FlattenedPathInfo pathInfo = new FlattenedPathInfo(new ArrayList<>(segments));
+                    descriptor.addAdditionalDbEntity(path, rel.getTargetEntity(), false, pathInfo);
                 }
                 return true;
             }

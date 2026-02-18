@@ -25,6 +25,7 @@ import org.apache.cayenne.exp.Expression;
 import org.apache.cayenne.exp.path.CayennePath;
 import org.apache.cayenne.map.DbEntity;
 import org.apache.cayenne.map.EntityInheritanceTree;
+import org.apache.cayenne.map.FlattenedPathInfo;
 import org.apache.cayenne.map.ObjAttribute;
 import org.apache.cayenne.map.ObjEntity;
 import org.apache.cayenne.map.ObjRelationship;
@@ -125,13 +126,15 @@ public class PersistentDescriptor implements ClassDescriptor {
 	 *
 	 * @param path path for entity
 	 * @param targetEntity additional entity
+	 * @param noDelete whether deletion of the root entity should NOT trigger deletion of this entity
+	 * @param pathInfo pre-computed classification of the relationship segments in the path
 	 */
-	void addAdditionalDbEntity(CayennePath path, DbEntity targetEntity, boolean noDelete) {
+	void addAdditionalDbEntity(CayennePath path, DbEntity targetEntity, boolean noDelete, FlattenedPathInfo pathInfo) {
 		if(additionalDbEntities == null) {
 			additionalDbEntities = new HashMap<>();
 		}
 
-		additionalDbEntities.put(path, new AdditionalDbEntityDescriptor(path, targetEntity, noDelete));
+		additionalDbEntities.put(path, new AdditionalDbEntityDescriptor(path, targetEntity, noDelete, pathInfo));
 	}
 
 	void sortProperties() {

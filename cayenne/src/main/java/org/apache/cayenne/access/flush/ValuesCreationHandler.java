@@ -51,9 +51,9 @@ class ValuesCreationHandler extends ArcValuesCreationHandler {
         DbEntity dbEntity = entity.getDbEntity();
 
         if(attribute.isFlattened()) {
-            // get target row ID
-            FlattenedPathProcessingResult result
-                    = processFlattenedPath(id, null, dbEntity, attribute.getDbAttributePath(), newValue != null);
+            // get target row ID - use cached FlattenedPathInfo if available
+            FlattenedPathProcessingResult result = processFlattenedAttributePath(id, dbEntity,
+                    attribute.getDbAttributePath(), newValue != null);
             if(result.isProcessed()) {
                 id = result.getId();
             }

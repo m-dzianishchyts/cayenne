@@ -21,13 +21,8 @@ package org.apache.cayenne.access.flush;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
 
 import org.apache.cayenne.ObjectId;
 import org.apache.cayenne.access.flush.operation.DbRowOp;
@@ -39,18 +34,20 @@ import org.apache.cayenne.access.flush.operation.InsertDbRowOp;
 import org.apache.cayenne.access.flush.operation.UpdateDbRowOp;
 import org.apache.cayenne.exp.parser.ASTDbPath;
 import org.apache.cayenne.exp.path.CayennePath;
+import org.apache.cayenne.exp.path.CayennePathSegment;
 import org.apache.cayenne.graph.ArcId;
 import org.apache.cayenne.graph.GraphChangeHandler;
-import org.apache.cayenne.map.DataMap;
 import org.apache.cayenne.map.DbAttribute;
 import org.apache.cayenne.map.DbEntity;
 import org.apache.cayenne.map.DbJoin;
 import org.apache.cayenne.map.DbRelationship;
-import org.apache.cayenne.map.EntityInheritanceTree;
-import org.apache.cayenne.map.EntityResolver;
+import org.apache.cayenne.map.FlattenedPathAnalyzer;
+import org.apache.cayenne.map.FlattenedPathInfo;
+import org.apache.cayenne.map.FlattenedPathInfo.AnnotatedSegment;
+import org.apache.cayenne.map.FlattenedPathSegmentType;
 import org.apache.cayenne.map.ObjEntity;
 import org.apache.cayenne.map.ObjRelationship;
-import org.apache.cayenne.util.CayenneMapEntry;
+import org.apache.cayenne.reflect.AdditionalDbEntityDescriptor;
 
 /**
  * Graph handler that collects information about arc changes into
@@ -83,6 +80,8 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
             actualTargetId = snapshotId;
         }
         ArcTarget arcTarget = new ArcTarget((ObjectId) nodeId, actualTargetId, arcId, !created);
+        ObjectId sourceId = arcTarget.getSourceId();
+        ObjectId targetId = arcTarget.getTargetId();
         if(factory.getProcessedArcs().contains(arcTarget.getReversed())) {
             return;
         }
@@ -94,223 +93,208 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
             if(arc.startsWith(ASTDbPath.DB_PREFIX)) {
                 String relName = arc.substring(ASTDbPath.DB_PREFIX.length());
                 DbRelationship dbRelationship = entity.getDbEntity().getRelationship(relName);
-                processRelationship(dbRelationship, arcTarget.getSourceId(), arcTarget.getTargetId(), created);
+                processRelationship(dbRelationship, sourceId, targetId, created);
             }
             return;
         }
 
         if(objRelationship.isFlattened()) {
-            FlattenedPathProcessingResult result = processFlattenedPath(arcTarget.getSourceId(), arcTarget.getTargetId(), entity.getDbEntity(),
-                    objRelationship.getDbRelationshipPath(), created);
+            FlattenedPathInfo pathInfo = objRelationship.getFlattenedPathInfo();
+            FlattenedPathProcessingResult result = processFlattenedPath(sourceId, targetId, pathInfo, created);
             if(result.isProcessed()) {
                 factory.getProcessedArcs().add(arcTarget);
             }
         } else {
             DbRelationship dbRelationship = objRelationship.getDbRelationships().get(0);
-            processRelationship(dbRelationship, arcTarget.getSourceId(), arcTarget.getTargetId(), created);
+            processRelationship(dbRelationship, sourceId, targetId, created);
             factory.getProcessedArcs().add(arcTarget);
         }
     }
 
-    FlattenedPathProcessingResult processFlattenedPath(ObjectId id, ObjectId finalTargetId, DbEntity entity, CayennePath dbPath, boolean add) {
+    /**
+     * Processes a flattened path using pre-computed {@link FlattenedPathInfo}.
+     */
+    FlattenedPathProcessingResult processFlattenedPath(ObjectId id, ObjectId finalTargetId,
+                                                       FlattenedPathInfo pathInfo, boolean add) {
+        return processFlattenedPath(id, finalTargetId, pathInfo, add, true);
+    }
+
+    /**
+     * Core implementation that processes a flattened path segment by segment.
+     */
+    private FlattenedPathProcessingResult processFlattenedPath(ObjectId id, ObjectId finalTargetId,
+                                                               FlattenedPathInfo pathInfo, boolean add,
+                                                               boolean lastSegmentIsTerminal) {
         if(shouldSkipFlattenedOp(id, finalTargetId)) {
             return flattenedResultNotProcessed();
         }
 
+        List<AnnotatedSegment> segments = pathInfo.getSegments();
         CayennePath flattenedPath = CayennePath.EMPTY_PATH;
-
         ObjectId srcId = id;
         ObjectId targetId = null;
 
-        List<CayenneMapEntry> dbPathComponents = new ArrayList<>();
-        Iterator<CayenneMapEntry> dbPathIterator = entity.resolvePathComponents(dbPath);
-        dbPathIterator.forEachRemaining(dbPathComponents::add);
+        for (int i = 0; i < segments.size(); i++) {
+            AnnotatedSegment segment = segments.get(i);
+            DbRelationship relationship = segment.getRelationship();
+            DbEntity target = relationship.getTargetEntity();
+            boolean isLast = lastSegmentIsTerminal && (i == segments.size() - 1);
+            flattenedPath = flattenedPath.dot(relationship.getName());
 
-        for (int i = 0; i < dbPathComponents.size(); i++) {
-            CayenneMapEntry entry = dbPathComponents.get(i);
-            flattenedPath = flattenedPath.dot(entry.getName());
-            if (entry instanceof DbRelationship) {
-                DbRelationship relationship = (DbRelationship)entry;
-                // intermediate db entity to be inserted
-                DbEntity target = relationship.getTargetEntity();
-                // if ID is present, just use it, otherwise create new
-                // if this is the last segment, and it's a relationship, use known target id from arc creation
-                boolean isLast = i == dbPathComponents.size() - 1;
-                if (isLast) {
-                    targetId = finalTargetId;
-                } else {
-                    if(!relationship.isToMany()) {
-                        targetId = factory.getStore().getFlattenedId(id, flattenedPath);
-                    } else {
-                        targetId = null;
-                    }
+            // Build remaining path for PK derivation
+            List<DbRelationship> remainingPath = new ArrayList<>(segments.size() - i - 1);
+            for (int j = i + 1; j < segments.size(); j++) {
+                remainingPath.add(segments.get(j).getRelationship());
+            }
+
+            if (isLast) {
+                // 1. Last segment: use finalTargetId directly
+                targetId = finalTargetId;
+            } else {
+                if (!relationship.isToMany()) {
+                    // 2. Look up in store (already marked)
+                    targetId = factory.getStore().getFlattenedId(id, flattenedPath);
                 }
-
-                // if targetId is not present, try to derive it from finalTargetId
                 if (targetId == null && finalTargetId != null) {
-                    List<CayenneMapEntry> remainingPath = dbPathComponents.subList(i + 1, dbPathComponents.size());
-                    Map<String, Object> derivedPk = derivePkValuesFromFinal(target, finalTargetId, remainingPath);
-                    if (!derivedPk.isEmpty()) {
-                        targetId = ObjectId.of(ASTDbPath.DB_PREFIX + target.getName(), derivedPk);
-                        if (!relationship.isToMany()) {
-                            factory.getStore().markFlattenedPath(id, flattenedPath, targetId);
-                        }
-                    }
-                }
-
-                if (targetId == null) {
-                    // should insert, regardless of original operation (insert/update)
-                    targetId = ObjectId.of(ASTDbPath.DB_PREFIX + target.getName());
-                    if (!relationship.isToMany()) {
+                    // 3. PK derivation from finalTargetId via remaining PK-to-PK chain
+                    targetId = tryDerivePkFromFinal(target, finalTargetId, remainingPath);
+                    if (targetId != null && !relationship.isToMany()) {
                         factory.getStore().markFlattenedPath(id, flattenedPath, targetId);
                     }
-
-                    DbRowOpType type;
-                    if (relationship.isToMany()) {
-                        // in case of vertical inheritance avoid DELETE/INSERT - use UPDATE instead (CAY-2890)
-                        boolean isVI = isInVerticalInheritanceChain(target);
-                        if (isVI) {
-                            type = (defaultType == DbRowOpType.INSERT && add) ? DbRowOpType.INSERT : DbRowOpType.UPDATE;
-                        } else {
-                            type = add ? DbRowOpType.INSERT : DbRowOpType.DELETE;
-                        }
-                        factory.getOrCreate(target, targetId, type);
-                    } else {
-                        type = add ? DbRowOpType.INSERT : DbRowOpType.UPDATE;
-                        factory.<DbRowOpWithValues>getOrCreate(target, targetId, type)
-                                .getValues()
-                                .addFlattenedId(flattenedPath, targetId);
-                    }
-                } else if (!isLast) {
-                    // should update existing DB row
-                    factory.getOrCreate(target, targetId, add ? DbRowOpType.UPDATE : defaultType);
                 }
-                processRelationship(relationship, srcId, targetId, shouldProcessAsAddition(relationship, add));
-                srcId = targetId; // use target as next source
             }
+
+            if (targetId == null) {
+                // 4. Fallback: create new row
+                targetId = createNewRow(segment.getType(), relationship, target, flattenedPath, id, add);
+            } else if (!isLast) {
+                factory.getOrCreate(target, targetId, add ? DbRowOpType.UPDATE : defaultType);
+            }
+
+            processRelationship(relationship, srcId, targetId, shouldProcessAsAddition(segment, add));
+            srcId = targetId;
         }
 
         return flattenedResultId(targetId);
     }
 
-    private boolean shouldSkipFlattenedOp(ObjectId id, ObjectId finalTargetId) {
-        // as we get two sides of the relationship processed,
-        // check if we got more information for a reverse operation
-        return finalTargetId != null
-                && factory.getStore().getFlattenedIds(id).isEmpty()
-                && !factory.getStore().getFlattenedIds(finalTargetId).isEmpty();
-    }
-
-    private boolean shouldProcessAsAddition(DbRelationship relationship, boolean add) {
-        if(add) {
-            return true;
-        }
-
-        // should always add data from one-to-one relationships
-        for(DbJoin join : relationship.getJoins()) {
-            if(!join.getSource().isPrimaryKey() || !join.getTarget().isPrimaryKey()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /**
-     * Checks if the given DbEntity is part of a vertical inheritance (VI) hierarchy.
-     * This is determined by finding ObjEntity inheritance roots and checking if the target
-     * DbEntity is reachable via PK-to-PK relationships from the root's DbEntity.
+     * Processes a flattened attribute path for {@link ValuesCreationHandler}.
+     * Uses the cached {@link FlattenedPathInfo} from {@link AdditionalDbEntityDescriptor}
+     * when available. Falls back to runtime classification via {@link FlattenedPathAnalyzer}.
      */
-    private boolean isInVerticalInheritanceChain(DbEntity target) {
-        DataMap dataMap = target.getDataMap();
-        if (dataMap == null) {
-            return false;
+    FlattenedPathProcessingResult processFlattenedAttributePath(ObjectId id, DbEntity entity,
+                                                                CayennePath dbPath, boolean add) {
+        if(shouldSkipFlattenedOp(id, null)) {
+            return flattenedResultNotProcessed();
         }
 
-        EntityResolver resolver = new EntityResolver(List.of(dataMap));
-        for (ObjEntity objEntity : dataMap.getObjEntities()) {
-            if (objEntity.getSuperEntity() != null) {
-                continue;
-            }
-            EntityInheritanceTree inheritanceTree = resolver.getInheritanceTree(objEntity.getName());
-            if (inheritanceTree == null || inheritanceTree.getChildren().isEmpty()) {
-                continue;
-            }
-            DbEntity rootDbEntity = objEntity.getDbEntity();
-            if (rootDbEntity != null && isInDependentPkChain(rootDbEntity, target)) {
-                return true;
+        // The dbPath ends with a DbAttribute; the relationship prefix is the path to the AdditionalDbEntity.
+        // Walk the path to find the last relationship segment index.
+        CayennePath relPath = dbPath.parent();
+        if (relPath != null && !relPath.isEmpty()) {
+            AdditionalDbEntityDescriptor addEntity = factory.getDescriptor().getAdditionalDbEntities().get(relPath);
+            if (addEntity != null && addEntity.getFlattenedPathInfo() != null) {
+                return processFlattenedPath(id, null, addEntity.getFlattenedPathInfo(), add, false);
             }
         }
-        return false;
+
+        // Fallback: walk the path segments, collecting only DbRelationship entries
+        List<AnnotatedSegment> segments = new ArrayList<>();
+        DbEntity current = entity;
+        for (CayennePathSegment seg : dbPath) {
+            DbRelationship rel = current.getRelationship(seg.value());
+            if (rel == null) {
+                break;
+            }
+            segments.add(new AnnotatedSegment(rel, FlattenedPathAnalyzer.classifySegment(rel)));
+            current = rel.getTargetEntity();
+        }
+
+        if (segments.isEmpty()) {
+            return flattenedResultNotProcessed();
+        }
+
+        FlattenedPathInfo pathInfo = new FlattenedPathInfo(segments);
+        return processFlattenedPath(id, null, pathInfo, add, false);
     }
 
     /**
-     * BFS traversal to check if target DbEntity is reachable from root via toDependentPK relationships.
-     * In vertical inheritance, child tables are linked to parent tables via PK-to-PK foreign keys.
+     * Creates a new row for a segment where no existing target ID was found.
+     * Operation type and flattenedId tracking depend on the segment type.
      */
-    private boolean isInDependentPkChain(DbEntity root, DbEntity target) {
-        Queue<DbEntity> queue = new LinkedList<>();
-        Set<DbEntity> visited = new HashSet<>();
-        queue.add(root);
-        visited.add(root);
+    private ObjectId createNewRow(FlattenedPathSegmentType segmentType, DbRelationship relationship,
+                                  DbEntity target, CayennePath flattenedPath, ObjectId rootId, boolean add) {
+        ObjectId targetId = ObjectId.of(ASTDbPath.DB_PREFIX + target.getName());
 
-        while (!queue.isEmpty()) {
-            DbEntity current = queue.remove();
-            for (DbRelationship relationship : current.getRelationships()) {
-                if (!relationship.isToDependentPK()) {
-                    continue;
-                }
-                DbEntity childEntity = relationship.getTargetEntity();
-                if (childEntity == null || !visited.add(childEntity)) {
-                    continue;
-                }
-                if (childEntity == target) {
-                    return true;
-                }
-                queue.add(childEntity);
-            }
+        if (!relationship.isToMany()) {
+            factory.getStore().markFlattenedPath(rootId, flattenedPath, targetId);
         }
-        return false;
+
+        DbRowOpType type = determineNewRowOpType(segmentType, relationship, add);
+
+        if (segmentType != FlattenedPathSegmentType.JOIN_TABLE && !relationship.isToMany()) {
+            factory.<DbRowOpWithValues>getOrCreate(target, targetId, type)
+                    .getValues()
+                    .addFlattenedId(flattenedPath, targetId);
+        } else {
+            factory.getOrCreate(target, targetId, type);
+        }
+
+        return targetId;
     }
 
     /**
-     * Derives PK values for the target DbEntity from finalTargetId by tracing through
-     * the remaining path. Only works if the entire remaining path consists of PK-to-PK joins.
+     * Determines the {@link DbRowOpType} for a new row based on segment type and direction.
+     * <ul>
+     *   <li>JOIN_TABLE: INSERT when adding, DELETE when removing</li>
+     *   <li>toMany (non-join): INSERT when adding, DELETE when removing</li>
+     *   <li>toOne (VI or regular): INSERT when adding, UPDATE when removing</li>
+     * </ul>
+     */
+    private DbRowOpType determineNewRowOpType(FlattenedPathSegmentType segmentType,
+                                              DbRelationship relationship, boolean add) {
+        if (segmentType == FlattenedPathSegmentType.JOIN_TABLE || relationship.isToMany()) {
+            return add ? DbRowOpType.INSERT : DbRowOpType.DELETE;
+        }
+        return add ? DbRowOpType.INSERT : DbRowOpType.UPDATE;
+    }
+
+    /**
+     * Attempts to derive the target {@link ObjectId} by tracing through the remaining
+     * path via PK-to-PK joins from {@code finalTargetId}.
      *
-     * @return map of target PK attribute names to their values, or empty map if derivation fails
+     * @return the derived {@link ObjectId}, or {@code null} if derivation fails
      */
-    private Map<String, Object> derivePkValuesFromFinal(DbEntity target, ObjectId finalTargetId,
-                                                        List<CayenneMapEntry> remainingPath) {
+    private static ObjectId tryDerivePkFromFinal(DbEntity target, ObjectId finalTargetId,
+                                                 List<DbRelationship> remainingPath) {
         Map<String, Object> finalIdSnapshot = finalTargetId.getIdSnapshot();
         if (finalIdSnapshot == null) {
-            return Map.of();
+            return null;
         }
-        Map<String, String> targetToFinalPkMapping = resolvePkMapping(target, remainingPath);
-        if (targetToFinalPkMapping.isEmpty()) {
-            return Map.of();
+        Map<String, String> pkMapping = resolvePkMapping(target, remainingPath);
+        if (pkMapping.isEmpty()) {
+            return null;
         }
-
-        Map<String, Object> derivedPkValues = new HashMap<>(targetToFinalPkMapping.size());
-        for (Map.Entry<String, String> entry : targetToFinalPkMapping.entrySet()) {
-            String targetPkAttr = entry.getKey();
-            String finalPkAttr = entry.getValue();
-            Object value = finalIdSnapshot.get(finalPkAttr);
+        Map<String, Object> derivedPk = new HashMap<>(pkMapping.size());
+        for (Map.Entry<String, String> entry : pkMapping.entrySet()) {
+            Object value = finalIdSnapshot.get(entry.getValue());
             if (value == null) {
-                return Map.of();
+                return null;
             }
-            derivedPkValues.put(targetPkAttr, value);
+            derivedPk.put(entry.getKey(), value);
         }
-        return derivedPkValues;
+        return ObjectId.of(ASTDbPath.DB_PREFIX + target.getName(), derivedPk);
     }
 
     /**
-     * Builds a mapping from target's PK attribute names to the corresponding PK attribute names
-     * in the final entity of the path. Traces through each relationship's joins to follow
-     * the PK-to-PK chain.
+     * Builds a mapping from target PK attribute names to the corresponding PK attribute names
+     * in the final entity, tracing through a PK-to-PK join chain.
      *
      * @return map where key = target PK attr name, value = final entity PK attr name;
      *         empty map if the path is not a valid PK-to-PK chain
      */
-    private Map<String, String> resolvePkMapping(DbEntity target, List<CayenneMapEntry> remainingPath) {
+    private static Map<String, String> resolvePkMapping(DbEntity target, List<DbRelationship> remainingPath) {
         Map<String, String> targetToCurrentPk = new HashMap<>();
         for (DbAttribute pk : target.getPrimaryKeys()) {
             targetToCurrentPk.put(pk.getName(), pk.getName());
@@ -318,12 +302,7 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
         if (targetToCurrentPk.isEmpty()) {
             return Map.of();
         }
-
-        for (CayenneMapEntry pathComponent : remainingPath) {
-            if (!(pathComponent instanceof DbRelationship)) {
-                return Map.of();
-            }
-            DbRelationship rel = (DbRelationship) pathComponent;
+        for (DbRelationship rel : remainingPath) {
             DbRelationship reverse = rel.getReverseRelationship();
             boolean isPkToPk = rel.isToDependentPK() || (reverse != null && reverse.isToDependentPK());
             if (!isPkToPk || rel.isToMany()) {
@@ -335,10 +314,8 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
                     return Map.of();
                 }
                 for (Map.Entry<String, String> entry : targetToCurrentPk.entrySet()) {
-                    String targetPkAttr = entry.getKey();
-                    String currentPkAttr = entry.getValue();
-                    if (currentPkAttr.equals(join.getSource().getName())) {
-                        nextMapping.put(targetPkAttr, join.getTarget().getName());
+                    if (entry.getValue().equals(join.getSource().getName())) {
+                        nextMapping.put(entry.getKey(), join.getTarget().getName());
                     }
                 }
             }
@@ -348,6 +325,23 @@ class ArcValuesCreationHandler implements GraphChangeHandler {
             targetToCurrentPk = nextMapping;
         }
         return targetToCurrentPk;
+    }
+
+    private boolean shouldSkipFlattenedOp(ObjectId id, ObjectId finalTargetId) {
+        // as we get two sides of the relationship processed,
+        // check if we got more information for a reverse operation
+        return finalTargetId != null
+                && factory.getStore().getFlattenedIds(id).isEmpty()
+                && !factory.getStore().getFlattenedIds(finalTargetId).isEmpty();
+    }
+
+    private boolean shouldProcessAsAddition(AnnotatedSegment segment, boolean add) {
+        if (add) {
+            return true;
+        }
+        // VI segments share PK between parent and child tables —
+        // must always propagate PK values, never nullify (CAY-2838)
+        return segment.isVerticalInheritance();
     }
 
     protected void processRelationship(DbRelationship dbRelationship, ObjectId srcId, ObjectId targetId, boolean add) {

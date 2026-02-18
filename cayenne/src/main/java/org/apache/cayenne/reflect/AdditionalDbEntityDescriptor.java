@@ -20,6 +20,7 @@ package org.apache.cayenne.reflect;
 
 import org.apache.cayenne.exp.path.CayennePath;
 import org.apache.cayenne.map.DbEntity;
+import org.apache.cayenne.map.FlattenedPathInfo;
 
 /**
  * A descriptor for an additional DB entity attached to the main one.
@@ -33,16 +34,19 @@ public class AdditionalDbEntityDescriptor {
     private final CayennePath path;
     private final DbEntity entity;
     private final boolean noDelete;
+    private final FlattenedPathInfo flattenedPathInfo;
 
     /**
      * @param path relative to the root entity path
      * @param entity target of this descriptor
      * @param noDelete should row deletion of the root entity trigger deletion of the additional entity
+     * @param pathInfo pre-computed classification of the relationship segments in the path
      */
-    AdditionalDbEntityDescriptor(CayennePath path, DbEntity entity, boolean noDelete) {
+    AdditionalDbEntityDescriptor(CayennePath path, DbEntity entity, boolean noDelete, FlattenedPathInfo pathInfo) {
         this.noDelete = noDelete;
         this.entity = entity;
         this.path = path;
+        this.flattenedPathInfo = pathInfo;
     }
 
     public DbEntity getDbEntity() {
@@ -55,5 +59,9 @@ public class AdditionalDbEntityDescriptor {
 
     public boolean noDelete() {
         return noDelete;
+    }
+
+    public FlattenedPathInfo getFlattenedPathInfo() {
+        return flattenedPathInfo;
     }
 }

@@ -80,6 +80,14 @@ public class ObjRelationship extends Relationship<ObjEntity, ObjAttribute, ObjRe
      */
     protected String mapKey;
 
+    /**
+     * Cached classification of flattened path segments.
+     * Lazily initialized by {@link #getFlattenedPathInfo()}.
+     *
+     * @since 5.0
+     */
+    private volatile FlattenedPathInfo flattenedPathInfo;
+
     public ObjRelationship() {
         this(null);
     }
@@ -272,6 +280,7 @@ public class ObjRelationship extends Relationship<ObjEntity, ObjAttribute, ObjRe
         }
 
         dbRelationships.add(dbRel);
+        invalidateFlattenedPathInfo();
 
         this.recalculateToManyValue();
     }
@@ -283,6 +292,7 @@ public class ObjRelationship extends Relationship<ObjEntity, ObjAttribute, ObjRe
     public void removeDbRelationship(DbRelationship dbRel) {
         refreshFromDeferredPath();
         if (dbRelationships.remove(dbRel)) {
+            invalidateFlattenedPathInfo();
             this.recalculateToManyValue();
         }
     }
@@ -292,6 +302,7 @@ public class ObjRelationship extends Relationship<ObjEntity, ObjAttribute, ObjRe
         this.dbRelationships.clear();
         this.readOnly = false;
         this.toMany = false;
+        invalidateFlattenedPathInfo();
     }
 
     /**
@@ -377,21 +388,54 @@ public class ObjRelationship extends Relationship<ObjEntity, ObjAttribute, ObjRe
     /**
      * Returns a boolean indicating whether the FK is accessed through an inheritance chain
      * (one or more shared-PK joins followed by the actual FK-to-PK join).
+     * <p>
+     * Delegates to {@link FlattenedPathInfo#isFkThroughInheritance()} when the
+     * relationship is flattened, returns {@code false} otherwise.
+     * </p>
      *
      * @since 5.0
      */
     public boolean isFkThroughInheritance() {
-        List<DbRelationship> dbRels = getDbRelationships();
-        if (dbRels.size() < 2) {
+        if (!isFlattened()) {
             return false;
         }
-        for (int i = 0; i < dbRels.size() - 1; i++) {
-            DbRelationship rel = dbRels.get(i);
-            if (!rel.isToDependentPK() || rel.isToMany()) {
-                return false;
+        return getFlattenedPathInfo().isFkThroughInheritance();
+    }
+
+    /**
+     * Returns the pre-computed classification of this flattened relationship's
+     * {@link DbRelationship} path. Each segment is annotated with a
+     * {@link FlattenedPathSegmentType}.
+     * <p>
+     * The info is lazily computed on first access and cached.
+     * It is invalidated whenever the underlying DbRelationship list changes.
+     * </p>
+     *
+     * @throws IllegalStateException if the relationship is not flattened
+     * @since 5.0
+     * @see FlattenedPathInfo
+     * @see FlattenedPathAnalyzer
+     */
+    public FlattenedPathInfo getFlattenedPathInfo() {
+        FlattenedPathInfo info = this.flattenedPathInfo;
+        if (info == null) {
+            synchronized (this) {
+                info = this.flattenedPathInfo;
+                if (info == null) {
+                    if (!isFlattened()) {
+                        throw new IllegalStateException(
+                                "getFlattenedPathInfo() called on non-flattened relationship: " + getName());
+                    }
+                    info = FlattenedPathAnalyzer.analyze(this);
+                    this.flattenedPathInfo = info;
+                }
             }
         }
-        return dbRels.get(dbRels.size() - 1).isToPK();
+        return info;
+    }
+
+    private void invalidateFlattenedPathInfo() {
+        this.flattenedPathInfo = null;
     }
 
     /**

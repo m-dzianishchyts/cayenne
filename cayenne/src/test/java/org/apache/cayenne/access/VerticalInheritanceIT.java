@@ -38,7 +38,6 @@ import org.apache.cayenne.unit.di.runtime.RuntimeCase;
 import org.apache.cayenne.unit.di.runtime.UseCayenneRuntime;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -734,7 +733,6 @@ public class VerticalInheritanceIT extends RuntimeCase {
 	}
 
 	@Test
-	@Ignore("Address CAY-2911")
 	public void testColumnQueryVerticallyInheritedToVerticallyInherited() throws SQLException {
         TableHelper ivDocumentTable = new TableHelper(dbHelper, "IV_DOCUMENT");
         ivDocumentTable.setColumns("ID", "TYPE").setColumnTypes(Types.INTEGER, Types.CHAR);
@@ -1244,7 +1242,6 @@ public class VerticalInheritanceIT extends RuntimeCase {
 	}
 
 	@Test
-//	@Ignore("Address CAY-2911")
 	public void testColumnSelectVerticalInheritance_Sub1Sub1() throws SQLException {
 		TableHelper ivRootTable = new TableHelper(dbHelper, "IV_ROOT");
 		ivRootTable.setColumns("ID", "NAME", "DISCRIMINATOR");
