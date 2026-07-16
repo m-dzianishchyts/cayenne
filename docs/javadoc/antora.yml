@@ -1,0 +1,5 @@
+name: javadoc
+title: JavaDoc
+version: '4.0'
+nav:
+  - modules/ROOT/nav.adoc

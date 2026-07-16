@@ -1,0 +1,10 @@
+= Cayenne 4.0 New Features and Upgrade Guide
+
+[small]#Copyright © 2011-{docyear} Apache Software Foundation and individual authors#
+
+This guide highlights the new features and changes introduced in Apache Cayenne 4.0. For a full list of changes consult
+RELEASE-NOTES.txt included in Cayenne download. For release-specific upgrade instructions check UPGRADE.txt.
+
+== New Features and Changes
+
+* xref:features.adoc[Guide to 4.0 Features]

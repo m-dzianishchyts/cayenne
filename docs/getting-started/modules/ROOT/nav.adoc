@@ -1,0 +1,5 @@
+* xref:index.adoc[Getting Started]
+** xref:setup.adoc[Setting up the environment]
+** xref:part2.adoc[Learning mapping basics]
+** xref:part3.adoc[Learning Cayenne API]
+** xref:webapp.adoc[Converting to Web Application]

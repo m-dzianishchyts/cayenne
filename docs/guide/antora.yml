@@ -1,0 +1,12 @@
+name: cayenne-guide
+title: Cayenne Guide
+version: '4.0'
+nav:
+  - modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    sectnums: ''
+    sectnumlevels: '2'
+    project-version: '4.0'
+    project-major-version: '4.0'
+    version: '4.0'
