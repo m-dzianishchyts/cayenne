@@ -1,0 +1,10 @@
+= Guide to 4.1 Features
+
+[small]#Copyright © 2011-{docyear} Apache Software Foundation and individual authors#
+
+This guide highlights the new features and changes introduced in Apache Cayenne 4.1. For a full list of changes consult
+RELEASE-NOTES.txt included in Cayenne download. For release-specific upgrade instructions check UPGRADE.txt.
+
+== New Features and Changes
+
+* xref:new-features.adoc[New Features and API Changes]

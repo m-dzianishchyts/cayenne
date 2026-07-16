@@ -1,0 +1,2 @@
+* xref:index.adoc[Guide to 4.1 Features]
+** xref:new-features.adoc[New Features and API Changes]
