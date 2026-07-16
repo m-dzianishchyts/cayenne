@@ -1,0 +1,2 @@
+* xref:index.adoc[Upgrade Guide]
+** xref:new-features.adoc[New Features and Changes]

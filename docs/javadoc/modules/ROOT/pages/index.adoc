@@ -1,0 +1,6 @@
+= JavaDoc
+
+JavaDoc API documentation for Apache Cayenne 4.2 is available at:
+
+* https://www.javadoc.io/doc/org.apache.cayenne/cayenne-server/4.2[cayenne-server]
+* https://www.javadoc.io/doc/org.apache.cayenne/cayenne-server/4.2[Full JavaDoc on javadoc.io]

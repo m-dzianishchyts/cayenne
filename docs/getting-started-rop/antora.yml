@@ -1,0 +1,11 @@
+name: getting-started-rop
+title: Getting Started ROP
+version: '4.2'
+nav:
+  - modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    sectnums: ''
+    sectnumlevels: '2'
+    project-version: '4.2'
+    project-major-version: '4.2'
