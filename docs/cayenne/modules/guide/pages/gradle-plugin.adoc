@@ -15,7 +15,7 @@
 [#gradle_plugin]
 = Gradle Plugin
 
-Cayenne Gradle plugin provides tasks similar to xref:maven-plugin.adoc#maven_plugin[Maven plugin]. It also provides `cayenne` extension that
+Cayenne Gradle plugin provides tasks similar to xref:maven-plugin.adoc[Maven plugin]. It also provides `cayenne` extension that
 has some useful utility methods. Here is example of how to include Cayenne plugin into your project:
 
 [source, Groovy, subs="verbatim,attributes"]
@@ -47,7 +47,7 @@ NOTE: Cayenne Gradle plugin is experimental and it's API may still change.
 
 == cgen
 
-Cgen task generates Java classes based on your DataMap, it has same configuration parameters as in Maven Plugin version, described in xref:tablecgen[Table, “cgen required parameters”.]. If you provided default DataMap via `cayenne.defaultDataMap`, you can skip `cgen` configuration as default settings will suffice in common case.
+Cgen task generates Java classes based on your DataMap, it has same configuration parameters as in Maven Plugin version, described in xref:maven-plugin.adoc#tablecgen[Table, “cgen required parameters”.]. If you provided default DataMap via `cayenne.defaultDataMap`, you can skip `cgen` configuration as default settings will suffice in common case.
 
 Here is how you can change settings of the default `cgen` task:
 

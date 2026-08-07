@@ -15,7 +15,7 @@
 [#ant_tasks]
 = Ant Tasks
 
-Ant tasks are the same as xref:maven-plugin.adoc#maven_plugin[Maven plugin goals] described previously, namely "cgen", "cdbgen", "cdbimport".
+Ant tasks are the same as xref:maven-plugin.adoc[Maven plugin goals] described previously, namely "cgen", "cdbgen", "cdbimport".
 Configuration parameters are also similar (except Maven can guess many defaults that Ant can't). To include Ant tasks
 in the project, use the following Antlib:
 

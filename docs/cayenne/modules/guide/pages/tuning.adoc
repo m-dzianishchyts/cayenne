@@ -301,7 +301,7 @@ Those are arbitrary names that allow to categorize queries for the purpose of se
 
 The above API is enough for the caching to work, but by default your cache is an unmanaged LRU map. You can't control its size,
 expiration policies, etc. For the managed cache, you will need to explicitly use one of the more advanced cache providers.
-Use can use xref:jCache.adoc#ext-jcache[JCache integration module] to enable any of JCache API compatible caching providers.
+Use can use xref:jCache.adoc[JCache integration module] to enable any of JCache API compatible caching providers.
 
 Often "passive" cache expiration policies used by caching providers are not sufficient, and the users want real-time cache invalidation when the data changes.
 So in addition to those policies, the app can invalidate individual cache groups explicitly with `RefreshQuery`:
@@ -314,7 +314,7 @@ context.performGenericQuery(refresh);
 
 The above can be used e.g. to build UI for manual cache invalidation.
 It is also possible to automate cache refresh when certain entities are committed.
-This can be done with the help of xref:cacheInvalidation.adoc#ext-cache-invalidation[Cache invalidation extension].
+This can be done with the help of xref:cacheInvalidation.adoc[Cache invalidation extension].
 
 Finally you may cluster cache group events. They are very small and can be efficiently sent over the wire to other JVMs running Cayenne.
 An example of Cayenne setup with event clustering is https://github.com/andrus/wowodc13/tree/master/services/src/main/java/demo/services/cayenne[available on GitHub].
